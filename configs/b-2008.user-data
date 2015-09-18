@@ -112,6 +112,9 @@ if ($hostnameCorrect -and $domainCorrect) {{
     }} else {{
       Set-Aggregator -aggregator "$aggregator"
     }}
+    if (-not $hostname.EndsWith("-golden")) {{
+      Run-StagingHacks
+    }}
   }} else {{
     if (Test-Path $puppetLog) {{
       Write-Log -message 'incomplete puppet run detected' -severity 'INFO'
