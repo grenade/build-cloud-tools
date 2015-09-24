@@ -1,3 +1,14 @@
+<script>ECHO OFF
+IF /i "%%COMPUTERNAME:-golden=%%"=="%%COMPUTERNAME%%" IF /i "%%COMPUTERNAME:-ec2-=%%"=="%%COMPUTERNAME%%" (
+mkdir %%PROGRAMDATA%%\Mozilla\RelOps
+icacls %%PROGRAMDATA%%\Mozilla\RelOps /inheritance:r
+echo [deploy]>%%PROGRAMDATA%%\Mozilla\RelOps\ec2.ini
+echo username={deploy_username}>>%%PROGRAMDATA%%\Mozilla\RelOps\ec2.ini
+echo password={deploy_password}>>%%PROGRAMDATA%%\Mozilla\RelOps\ec2.ini
+echo hostname={getcert_server}>>%%PROGRAMDATA%%\Mozilla\RelOps\ec2.ini
+icacls %%PROGRAMDATA%%\Mozilla\RelOps\ec2.ini /deny Everyone:(D)
+)
+</script>
 <powershell><#
 This Source Code Form is subject to the terms of the Mozilla Public
 License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -62,6 +73,11 @@ param (
   [string] $logSender = ('{{0}}@{{1}}.{{2}}' -f $env:USERNAME, $hostname, $domain),
   [string[]] $logRecipients = @('releng-puppet-mail@mozilla.com')
 )
+$bat = ('{{0}}\Amazon\Ec2ConfigService\Scripts\UserScript.bat' -f $env:ProgramFiles)
+if (Test-Path $bat) {
+  Remove-Item -path $bat -force
+}
+
 # runtime configuration
 $runLog = [IO.Path]::Combine($logDir, 'userdata-run.log')
 $puppetLog = [IO.Path]::Combine($logDir, 'puppet-agent-run.log')
@@ -89,32 +105,33 @@ function Download-Module {{
   (New-Object Net.WebClient).DownloadFile($url, ('{{0}}\{{1}}\{{2}}' -f $modulesPath, $moduleName, $filename))
 }}
 
-# download and import the Ec2UserdataUtils module
+# download and import the Ec2UserdataUtilsVanilla module
 # todo: swap hardcoded puppet url when puppet_server token is being correctly populated (spot and golden)
-#Download-Module -url ('http://{{0}}/repos/powershell/Ec2UserdataUtils.psm1' -f $puppetServer)
-Download-Module -url 'http://releng-puppet2.srv.releng.scl3.mozilla.com/repos/powershell/Ec2UserdataUtils.psm1'
-Import-Module Ec2UserdataUtils
+#Download-Module -url ('http://{{0}}/repos/powershell/Ec2UserdataUtilsVanilla.psm1' -f $puppetServer)
+Download-Module -url 'http://releng-puppet2.srv.releng.scl3.mozilla.com/repos/powershell/Ec2UserdataUtilsVanilla.psm1'
+Import-Module Ec2UserdataUtilsVanilla
 
 # create the log directory if it doesn't exist
 New-Item -ItemType Directory -Force -Path $logDir
 Disable-Firewall 
 Disable-WindowsUpdate
+Install-BasePrerequisites
 Disable-PuppetService
 $hostnameCorrect = (Is-HostnameSetCorrectly -hostnameExpected $hostname)
 $domainCorrect = (Is-DomainSetCorrectly -domainExpected $domain)
 if ($hostnameCorrect -and $domainCorrect) {{
-  Write-Log -message ('correct hostname ({{0}}) detected' -f $hostname) -severity 'INFO'
-  Write-Log -message ('correct domain ({{0}}) detected' -f $domain) -severity 'INFO'
+  Write-Log -message ('correct hostname ({{0}}) detected' -f $hostname) -severity 'DEBUG'
+  Write-Log -message ('correct domain ({{0}}) detected' -f $domain) -severity 'DEBUG'
   if (($hostname.Contains("-spot-")) -or (Has-PuppetRunSuccessfully -puppetLog $puppetLog)) {{
-    Write-Log -message 'skipping puppet agent run, prior run detected' -severity 'INFO'
+    Write-Log -message 'skipping puppet agent run, prior run detected' -severity 'DEBUG'
     if (Is-AggregatorConfiguredCorrectly -aggregator "$aggregator") {{
-      Write-Log -message 'correct log aggregator config detected' -severity 'INFO'
+      Write-Log -message 'correct log aggregator config detected' -severity 'DEBUG'
     }} else {{
       Set-Aggregator -aggregator "$aggregator"
     }}
   }} else {{
     if (Test-Path $puppetLog) {{
-      Write-Log -message 'incomplete puppet run detected' -severity 'INFO'
+      Write-Log -message 'incomplete puppet run detected' -severity 'WARN'
     }}
     # todo: swap hardcoded puppet url when puppet_server token is being correctly populated (golden)
     #Run-Puppet -hostname $hostname -domain $domain -puppetServer $puppetServer -logdest $puppetLog

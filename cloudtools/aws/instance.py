@@ -27,8 +27,11 @@ def run_instance(region, hostname, config, key_name, user='root',
     if 'device_map' in config:
         bdm = BlockDeviceMapping()
         for device, device_info in config['device_map'].items():
-            bdm[device] = BlockDeviceType(size=device_info['size'],
-                                          delete_on_termination=True)
+            if device_info['remove']:
+                bdm[device] = BlockDeviceType(no_device=True)
+            else:
+                bdm[device] = BlockDeviceType(
+                    size=device_info['size'], delete_on_termination=True)
     interfaces = None
     if dns_required:
         interfaces = make_instance_interfaces(
