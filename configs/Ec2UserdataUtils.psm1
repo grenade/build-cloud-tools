@@ -711,7 +711,7 @@ function Set-IniValue {
     Write-Log -message ("{0} :: Function started" -f $($MyInvocation.MyCommand.Name)) -severity 'DEBUG'
   }
   process {
-    if (Test-Path $hgrc) {
+    if (Test-Path $file) {
       Write-Log -message ("{0} :: detected ini file at: {1}" -f $($MyInvocation.MyCommand.Name), $file) -severity 'DEBUG'
       $config = Get-IniContent -FilePath $file
       if (-not $config.ContainsKey($section)) {
