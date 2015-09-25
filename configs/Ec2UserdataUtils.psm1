@@ -215,7 +215,9 @@ function Disable-PuppetService {
     Stops and disables the puppet service and deletes the RunPuppet scheduled task
   #>
   Disable-Service -serviceName 'puppet'
-  if ((Get-ScheduledTask | Select Name | ? {$_.Name -eq 'RunPuppet'}) -ne $null) {
+  $ss = New-Object -com Schedule.Service 
+  $ss.Connect()
+  if (($ss.GetFolder("\").GetTasks(0) | Select Name | ? {$_.Name -eq 'RunPuppet'}) -ne $null) {
     Write-Log -message 'deleting RunPuppet scheduled task' -severity 'INFO'
     $schtasksArgs = @('/delete', '/tn', 'RunPuppet', '/f')
     & 'schtasks' $schtasksArgs
@@ -246,7 +248,9 @@ function Run-Puppet {
     Remove-Item -path $ini -force
     $sslPath = ('{0}\PuppetLabs\puppet\var\ssl' -f $env:ProgramData)
     foreach ($folder in @(('{0}\private_keys' -f $sslPath), ('{0}\certs' -f $sslPath))) {
-      Remove-Item -path $folder -recurse -force
+      if (Test-Path $folder) {
+        Remove-Item -path $folder -recurse -force
+      }
       New-Item -ItemType Directory -Force -Path $folder
     }
     $url = 'https://{0}/deploy/getcert.cgi' -f $config['deploy']['hostname']
@@ -254,12 +258,10 @@ function Run-Puppet {
     $cc.Add($url, "Basic", (New-Object Net.NetworkCredential($config['deploy']['username'],$config['deploy']['password'])))
     $wc = New-Object Net.WebClient
     $wc.Credentials = $cc
-    foreach ($blob in $wc.DownloadString($url).Split('cat <<EOF >')) {
-      if ($blob.StartsWith('private_keys/') -or $blob.StartsWith('certs/')) {
-        $cert = $blob.Split('\n', ([StringSplitOptions]::RemoveEmptyEntries))
-        $cert.Remove("EOF")
-        $cert[1..($cert.Length-1)] | Out-File ('{0}\{1}' -f $sslPath, $cert[0])
-      }
+    [Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
+    Invoke-Command -ScriptBlock {
+      cd $sslPath
+      $wc.DownloadString($url) | & ('{0}\Git\usr\bin\sh' -f $env:ProgramFiles)
     }
     if ((-not (Test-Path ('{0}\certs\ca.pem' -f $sslPath))) -or (-not (Test-Path ('{0}\certs\{1}.{2}.pem' -f $sslPath, $env:COMPUTERNAME, $env:USERDOMAIN))) -or (-not (Test-Path ('{0}\private_keys\{1}.{2}.pem' -f $sslPath, $env:COMPUTERNAME, $env:USERDOMAIN)))) {
       Write-Log -message ("{0} :: failed to install certificates" -f $($MyInvocation.MyCommand.Name)) -severity 'ERROR'
@@ -271,7 +273,9 @@ function Run-Puppet {
   } else {
     Write-Log -message ("{0} :: unable to install certificates, no puppet agent run attempted" -f $($MyInvocation.MyCommand.Name)) -severity 'ERROR'
   }
-  if ((Get-ScheduledTask | Select Name | ? {$_.Name -eq 'RunPuppet'}) -ne $null) {
+  $ss = New-Object -com Schedule.Service 
+  $ss.Connect()
+  if (($ss.GetFolder("\").gettasks(0) | Select Name | ? {$_.Name -eq 'RunPuppet'}) -ne $null) {
     Write-Log -message 'deleting RunPuppet scheduled task (again)' -severity 'INFO'
     $schtasksArgs = @('/delete', '/tn', 'RunPuppet', '/f')
     & 'schtasks' $schtasksArgs
@@ -354,9 +358,8 @@ function Is-DomainSetCorrectly {
   } elseif (Test-Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Domain") {
     $primaryDnsSuffix = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\" -Name "Domain")."Domain"
   } else {
-    $primaryDnsSuffix = ""
+    $primaryDnsSuffix = $env:USERDOMAIN
   }
-  
   if ("$domainExpected" -ieq "$primaryDnsSuffix") {
     return $true
   } else {
@@ -865,6 +868,7 @@ function Install-RelOpsPrerequisites {
   Install-Package -id 'sublimetext3' -version '3.0.0.3083' -testPath ('{0}\Sublime Text 3\sublime_text.exe' -f $env:ProgramFiles)
   Install-Package -id 'sublimetext3.packagecontrol' -version '2.0.0.20140915' -testPath ('{0}\Sublime Text 3\Installed Packages\Package Control.sublime-package' -f $env:AppData)
   Install-Package -id 'puppet-agent' -version '1.2.4' -testPath ('{0}\Puppet Labs\Puppet\bin\puppet.bat' -f $env:ProgramFiles)
+  Install-Package -id 'git' -version '2.5.3' -testPath ('{0}\Git\usr\bin\bash.exe' -f $env:ProgramFiles)
 }
 
 function Install-MozillaBuildPrerequisites {
