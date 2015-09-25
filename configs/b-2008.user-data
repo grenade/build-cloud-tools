@@ -134,8 +134,8 @@ if ($hostnameCorrect -and $domainCorrect) {{
       Write-Log -message 'incomplete puppet run detected' -severity 'WARN'
     }}
     # todo: swap hardcoded puppet url when puppet_server token is being correctly populated (golden)
-    #Run-Puppet -hostname $hostname -domain $domain -puppetServer $puppetServer -logdest $puppetLog
-    Run-Puppet -hostname $hostname -domain $domain -logdest $puppetLog
+    #Run-Puppet -puppetServer $puppetServer -logdest $puppetLog
+    Run-Puppet -logdest $puppetLog
     Send-Log -logfile $puppetLog -subject ('Puppet Agent Report for {{0}}.{{1}}' -f $hostname, $domain) -to $logRecipients -from $logSender
     Flush-EventLog
     & cipher /w:c:

@@ -215,9 +215,11 @@ function Disable-PuppetService {
     Stops and disables the puppet service and deletes the RunPuppet scheduled task
   #>
   Disable-Service -serviceName 'puppet'
-  Write-Log -message 'deleting RunPuppet scheduled task' -severity 'INFO'
-  $schtasksArgs = @('/delete', '/tn', 'RunPuppet', '/f')
-  & 'schtasks' $schtasksArgs
+  if ((Get-ScheduledTask | Select Name | ? {$_.Name -eq 'RunPuppet'}) -ne $null) {
+    Write-Log -message 'deleting RunPuppet scheduled task' -severity 'INFO'
+    $schtasksArgs = @('/delete', '/tn', 'RunPuppet', '/f')
+    & 'schtasks' $schtasksArgs
+  }
 }
 
 function Run-Puppet {
@@ -234,29 +236,48 @@ function Run-Puppet {
     The domain of the instance, required for facter env vars.
   #>
   param (
-    [string] $hostname,
-    [string] $domain,
     [string] $puppetServer = 'puppet',
     [string] $logdest
   )
-  Write-Log -message 'setting environment variables' -severity 'INFO'
-  [Environment]::SetEnvironmentVariable("FACTER_domain", "$domain", "Process")
-  [Environment]::SetEnvironmentVariable("FACTER_hostname", "$hostname", "Process")
-  [Environment]::SetEnvironmentVariable("FACTER_fqdn", ("$hostname.$domain"), "Process")
-  [Environment]::SetEnvironmentVariable("COMPUTERNAME", "$hostname", "Machine")
-  [Environment]::SetEnvironmentVariable("USERDOMAIN", "$domain", "Machine")
-
-  Write-Log -message 'running puppetization script' -severity 'INFO'
-  #todo: log and mail output from vbs script
-  cscript.exe ('{0}\Puppetlabs\puppet\var\puppettize_TEMP.vbs' -f $env:ProgramData)
-  
-  Write-Log -message ('running puppet agent, logging to: {0}' -f $logdest) -severity 'INFO'
-  $puppetArgs = @('agent', '--test', '--detailed-exitcodes', '--server', $puppetServer, '--logdest', $logdest)
-  & 'puppet' $puppetArgs
-
-  Write-Log -message 'deleting RunPuppet scheduled task (again)' -severity 'INFO'
-  $schtasksArgs = @('/delete', '/tn', 'RunPuppet', '/f')
-  & 'schtasks' $schtasksArgs
+  Write-Log -message ("{0} :: installing certificates" -f $($MyInvocation.MyCommand.Name)) -severity 'INFO'
+  $ini = ('{0}\Mozilla\RelOps\ec2.ini' -f $env:ProgramData)
+  if (Test-Path $ini) {
+    $config = Get-IniContent -FilePath $ini
+    Remove-Item -path $ini -force
+    $sslPath = ('{0}\PuppetLabs\puppet\var\ssl' -f $env:ProgramData)
+    foreach ($folder in @(('{0}\private_keys' -f $sslPath), ('{0}\certs' -f $sslPath))) {
+      Remove-Item -path $folder -recurse -force
+      New-Item -ItemType Directory -Force -Path $folder
+    }
+    $url = 'https://{0}/deploy/getcert.cgi' -f $config['deploy']['hostname']
+    $cc = New-Object Net.CredentialCache
+    $cc.Add($url, "Basic", (New-Object Net.NetworkCredential($config['deploy']['username'],$config['deploy']['password'])))
+    $wc = New-Object Net.WebClient
+    $wc.Credentials = $cc
+    foreach ($blob in $wc.DownloadString($url).Split('cat <<EOF >')) {
+      if ($blob.StartsWith('private_keys/') -or $blob.StartsWith('certs/')) {
+        $cert = $blob.Split('\n', ([StringSplitOptions]::RemoveEmptyEntries))
+        $cert.Remove("EOF")
+        $cert[1..($cert.Length-1)] | Out-File ('{0}\{1}' -f $sslPath, $cert[0])
+      }
+    }
+    if (!(Test-Path ('{0}\certs\ca.pem' -f $sslPath))
+      -or !(Test-Path ('{0}\certs\{1}.{2}.pem' -f $sslPath, $env:COMPUTERNAME, $env:USERDOMAIN))
+      -or !(Test-Path ('{0}\private_keys\{1}.{2}.pem' -f $sslPath, $env:COMPUTERNAME, $env:USERDOMAIN))) {
+      Write-Log -message ("{0} :: failed to install certificates" -f $($MyInvocation.MyCommand.Name)) -severity 'ERROR'
+    } else {
+      Write-Log -message ("{0} :: running puppet agent, logging to: {1}" -f $($MyInvocation.MyCommand.Name), $logdest) -severity 'INFO'
+      $puppetArgs = @('agent', '--test', '--detailed-exitcodes', '--server', $puppetServer, '--logdest', $logdest)
+      & 'puppet' $puppetArgs
+    }
+  } else {
+    Write-Log -message ("{0} :: unable to install certificates, no puppet agent run attempted" -f $($MyInvocation.MyCommand.Name)) -severity 'ERROR'
+  }
+  if ((Get-ScheduledTask | Select Name | ? {$_.Name -eq 'RunPuppet'}) -ne $null) {
+    Write-Log -message 'deleting RunPuppet scheduled task (again)' -severity 'INFO'
+    $schtasksArgs = @('/delete', '/tn', 'RunPuppet', '/f')
+    & 'schtasks' $schtasksArgs
+  }
 }
 
 function Is-HostnameSetCorrectly {
