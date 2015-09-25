@@ -27,11 +27,8 @@ def run_instance(region, hostname, config, key_name, user='root',
     if 'device_map' in config:
         bdm = BlockDeviceMapping()
         for device, device_info in config['device_map'].items():
-            if device_info['remove']:
-                bdm[device] = BlockDeviceType(no_device=True)
-            else:
-                bdm[device] = BlockDeviceType(
-                    size=device_info['size'], delete_on_termination=True)
+            bdm[device] = BlockDeviceType(size=device_info['size'],
+                                          delete_on_termination=True)
     interfaces = None
     if dns_required:
         interfaces = make_instance_interfaces(
@@ -288,8 +285,8 @@ def create_block_device_mapping(ami, device_map):
             bd.size = device_info['size']
         if ami.root_device_name == device:
             ami_size = ami.block_device_mapping[device].size
-            if ami.virtualization_type == "hvm":
-                # Overwrite root device size for HVM instances, since they
+            if ami.virtualization_type == "hvm" and "-2008" not in config['type']:
+                # Overwrite root device size for posix HVM instances, since they
                 # cannot be resized online
                 bd.size = ami_size
             elif device_info.get('size'):

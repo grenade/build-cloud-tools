@@ -3,9 +3,9 @@ IF /i "%%COMPUTERNAME:-golden=%%"=="%%COMPUTERNAME%%" IF /i "%%COMPUTERNAME:-ec2
 mkdir %%PROGRAMDATA%%\Mozilla\RelOps
 icacls %%PROGRAMDATA%%\Mozilla\RelOps /inheritance:r
 echo [deploy]>%%PROGRAMDATA%%\Mozilla\RelOps\ec2.ini
-echo username={deploy_username}>>%%PROGRAMDATA%%\Mozilla\RelOps\ec2.ini
-echo password={deploy_password}>>%%PROGRAMDATA%%\Mozilla\RelOps\ec2.ini
-echo hostname={getcert_server}>>%%PROGRAMDATA%%\Mozilla\RelOps\ec2.ini
+echo username=deploy>>%%PROGRAMDATA%%\Mozilla\RelOps\ec2.ini
+echo password={password}>>%%PROGRAMDATA%%\Mozilla\RelOps\ec2.ini
+echo hostname=releng-puppet2.srv.releng.scl3.mozilla.com>>%%PROGRAMDATA%%\Mozilla\RelOps\ec2.ini
 icacls %%PROGRAMDATA%%\Mozilla\RelOps\ec2.ini /deny Everyone:(D)
 )
 </script>
@@ -74,9 +74,9 @@ param (
   [string[]] $logRecipients = @('releng-puppet-mail@mozilla.com')
 )
 $bat = ('{{0}}\Amazon\Ec2ConfigService\Scripts\UserScript.bat' -f $env:ProgramFiles)
-if (Test-Path $bat) {
+if (Test-Path $bat) {{
   Remove-Item -path $bat -force
-}
+}}
 
 # runtime configuration
 $runLog = [IO.Path]::Combine($logDir, 'userdata-run.log')

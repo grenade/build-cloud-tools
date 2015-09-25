@@ -261,9 +261,7 @@ function Run-Puppet {
         $cert[1..($cert.Length-1)] | Out-File ('{0}\{1}' -f $sslPath, $cert[0])
       }
     }
-    if (!(Test-Path ('{0}\certs\ca.pem' -f $sslPath))
-      -or !(Test-Path ('{0}\certs\{1}.{2}.pem' -f $sslPath, $env:COMPUTERNAME, $env:USERDOMAIN))
-      -or !(Test-Path ('{0}\private_keys\{1}.{2}.pem' -f $sslPath, $env:COMPUTERNAME, $env:USERDOMAIN))) {
+    if ((-not (Test-Path ('{0}\certs\ca.pem' -f $sslPath))) -or (-not (Test-Path ('{0}\certs\{1}.{2}.pem' -f $sslPath, $env:COMPUTERNAME, $env:USERDOMAIN))) -or (-not (Test-Path ('{0}\private_keys\{1}.{2}.pem' -f $sslPath, $env:COMPUTERNAME, $env:USERDOMAIN)))) {
       Write-Log -message ("{0} :: failed to install certificates" -f $($MyInvocation.MyCommand.Name)) -severity 'ERROR'
     } else {
       Write-Log -message ("{0} :: running puppet agent, logging to: {1}" -f $($MyInvocation.MyCommand.Name), $logdest) -severity 'INFO'
