@@ -24,7 +24,7 @@ function Write-Log {
   if (!(Test-Path $path)) {
     [Environment]::SetEnvironmentVariable('OutputToConsole', 'true', 'Process')
   }
-  $formattedMessage = ('{0} [{1}] {2}' -f [DateTime]::Now.ToString("yyyy-MM-dd HH:mm:ss"), $severity, $message)
+  $formattedMessage = ('{0} [{1}] {2}' -f [DateTime]::Now.ToString("yyyy-MM-dd HH:mm:ss zzz"), $severity, $message)
   Add-Content -Path $path -Value $formattedMessage
   switch ($severity) 
   {
