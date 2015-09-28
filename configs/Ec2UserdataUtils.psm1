@@ -26,15 +26,39 @@ function Write-Log {
   }
   $formattedMessage = ('{0} [{1}] {2}' -f [DateTime]::Now.ToString("yyyy-MM-dd HH:mm:ss"), $severity, $message)
   Add-Content -Path $path -Value $formattedMessage
-  if ($env:OutputToConsole -eq 'true') {
-    switch ($severity) 
-    {
-      'DEBUG' { Write-Host -Object $formattedMessage -ForegroundColor 'DarkGray' }
-      'WARN' { Write-Host -Object $formattedMessage -ForegroundColor 'DarkYellow' }
-      'ERROR' { Write-Host -Object $formattedMessage -ForegroundColor 'Red' }
-      default { Write-Host -Object $formattedMessage }
+  switch ($severity) 
+  {
+    #{Error | Warning | Information | SuccessAudit | FailureAudit}
+    'DEBUG' {
+      $foregroundColor = 'DarkGray'
+      $entryType = 'SuccessAudit'
+      $eventId = 2
+    }
+    'WARN' {
+      $foregroundColor = 'DarkYellow'
+      $entryType = 'Warning'
+      $eventId = 3
+    }
+    'ERROR' {
+      $foregroundColor = 'Red'
+      $entryType = 'Error'
+      $eventId = 4
+    }
+    default {
+      $foregroundColor = 'White'
+      $entryType = 'Information'
+      $eventId = 1
     }
   }
+  if ($env:OutputToConsole -eq 'true') {
+    Write-Host -Object $formattedMessage -ForegroundColor $foregroundColor
+  }
+  $logName = 'Application'
+  $source = 'Userdata'
+  if (!([Diagnostics.EventLog]::Exists($logName)) -or !([Diagnostics.EventLog]::SourceExists($source))) {
+    New-EventLog -LogName $logName -Source $source
+  }
+  Write-EventLog -LogName $logName -Source $source -EntryType $entryType -Category 0 -EventID $eventId -Message $message
 }
 
 function Send-Log {
@@ -224,6 +248,49 @@ function Disable-PuppetService {
   }
 }
 
+function Install-Certificates {
+  param (
+    [string] $ini = ('{0}\Mozilla\RelOps\ec2.ini' -f $env:ProgramData),
+    [string] $sslPath = ('{0}\PuppetLabs\puppet\var\ssl' -f $env:ProgramData),
+    [hashtable] $certs = @{
+      'ca' = ('{0}\certs\ca.pem' -f $sslPath);
+      'pub' = ('{0}\certs\{1}.{2}.pem' -f $sslPath, $env:COMPUTERNAME, $env:USERDOMAIN);
+      'key' = ('{0}\private_keys\{1}.{2}.pem' -f $sslPath, $env:COMPUTERNAME, $env:USERDOMAIN)
+    }
+  )
+  if ((Test-Path $certs['ca']) -and (Test-Path $certs['pub']) -and (Test-Path $certs['key'])) {
+    Write-Log -message ("{0} :: certificates detected" -f $($MyInvocation.MyCommand.Name)) -severity 'INFO'
+    return $true
+  } elseif (Test-Path $ini) {
+    Write-Log -message ("{0} :: installing certificates" -f $($MyInvocation.MyCommand.Name)) -severity 'INFO'
+    $deployConfig = Get-IniContent -FilePath $ini
+    Remove-Item -path $ini -force
+    foreach ($folder in @(('{0}\private_keys' -f $sslPath), ('{0}\certs' -f $sslPath))) {
+      if (Test-Path $folder) {
+        Remove-Item -path $folder -recurse -force
+      }
+      New-Item -ItemType Directory -Force -Path $folder
+    }
+    $url = 'https://{0}/deploy/getcert.cgi' -f $deployConfig['deploy']['hostname']
+    $cc = New-Object Net.CredentialCache
+    $cc.Add($url, "Basic", (New-Object Net.NetworkCredential($deployConfig['deploy']['username'],$deployConfig['deploy']['password'])))
+    $wc = New-Object Net.WebClient
+    $wc.Credentials = $cc
+    [Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
+    Invoke-Command -ScriptBlock {
+      cd $sslPath
+      $shArgs = @('set', 'PATH=/c/Program Files/Git/usr/bin:$PATH')
+      & ('{0}\Git\usr\bin\sh' -f $env:ProgramFiles) $shArgs
+      $wc.DownloadString($url) | & ('{0}\Git\usr\bin\sh' -f $env:ProgramFiles)
+      # todo: set permissions on downloaded key files
+    }
+    return $true
+  } else {
+    Write-Log -message ("{0} :: unable to install certificates" -f $($MyInvocation.MyCommand.Name)) -severity 'ERROR'
+    return $false
+  }
+}
+
 function Run-Puppet {
   <#
   .Synopsis
@@ -241,37 +308,28 @@ function Run-Puppet {
     [string] $puppetServer = 'puppet',
     [string] $logdest
   )
-  Write-Log -message ("{0} :: installing certificates" -f $($MyInvocation.MyCommand.Name)) -severity 'INFO'
-  $ini = ('{0}\Mozilla\RelOps\ec2.ini' -f $env:ProgramData)
-  if (Test-Path $ini) {
-    $config = Get-IniContent -FilePath $ini
-    Remove-Item -path $ini -force
-    $sslPath = ('{0}\PuppetLabs\puppet\var\ssl' -f $env:ProgramData)
-    foreach ($folder in @(('{0}\private_keys' -f $sslPath), ('{0}\certs' -f $sslPath))) {
-      if (Test-Path $folder) {
-        Remove-Item -path $folder -recurse -force
+  if (Install-Certificates) {
+    $puppetConfig = @{
+      'main' = @{
+        'logdir' = '$vardir/log/puppet';
+        'rundir' = '$vardir/run/puppet';
+        'ssldir' = '$vardir/ssl'
+      };
+      'agent' = @{
+        'classfile' = '$vardir/classes.txt';
+        'localconfig' = '$vardir/localconfig';
+        'server' = 'releng-puppet1.srv.releng.use1.mozilla.com';
+        'certificate_revocation' = 'false';
+        'pluginsync' = 'true';
+        'usecacheonfailure' = 'false'
       }
-      New-Item -ItemType Directory -Force -Path $folder
     }
-    $url = 'https://{0}/deploy/getcert.cgi' -f $config['deploy']['hostname']
-    $cc = New-Object Net.CredentialCache
-    $cc.Add($url, "Basic", (New-Object Net.NetworkCredential($config['deploy']['username'],$config['deploy']['password'])))
-    $wc = New-Object Net.WebClient
-    $wc.Credentials = $cc
-    [Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
-    Invoke-Command -ScriptBlock {
-      cd $sslPath
-      $wc.DownloadString($url) | & ('{0}\Git\usr\bin\sh' -f $env:ProgramFiles)
-    }
-    if ((-not (Test-Path ('{0}\certs\ca.pem' -f $sslPath))) -or (-not (Test-Path ('{0}\certs\{1}.{2}.pem' -f $sslPath, $env:COMPUTERNAME, $env:USERDOMAIN))) -or (-not (Test-Path ('{0}\private_keys\{1}.{2}.pem' -f $sslPath, $env:COMPUTERNAME, $env:USERDOMAIN)))) {
-      Write-Log -message ("{0} :: failed to install certificates" -f $($MyInvocation.MyCommand.Name)) -severity 'ERROR'
-    } else {
-      Write-Log -message ("{0} :: running puppet agent, logging to: {1}" -f $($MyInvocation.MyCommand.Name), $logdest) -severity 'INFO'
-      $puppetArgs = @('agent', '--test', '--detailed-exitcodes', '--server', $puppetServer, '--logdest', $logdest)
-      & 'puppet' $puppetArgs
-    }
+    Out-IniFile -InputObject $puppetConfig -FilePath ('{0}\PuppetLabs\puppet\etc\puppet.conf' -f $env:ProgramData) -Encoding "ASCII" -Force
+    Write-Log -message ("{0} :: running puppet agent, logging to: {1}" -f $($MyInvocation.MyCommand.Name), $logdest) -severity 'INFO'
+    $puppetArgs = @('agent', '--test', '--detailed-exitcodes', '--server', $puppetServer, '--logdest', $logdest)
+    & 'puppet' $puppetArgs
   } else {
-    Write-Log -message ("{0} :: unable to install certificates, no puppet agent run attempted" -f $($MyInvocation.MyCommand.Name)) -severity 'ERROR'
+    Write-Log -message ("{0} :: not attempting puppet agent run" -f $($MyInvocation.MyCommand.Name)) -severity 'DEBUG'
   }
   $ss = New-Object -com Schedule.Service 
   $ss.Connect()
@@ -450,8 +508,8 @@ function Flush-EventLog {
   .Synopsis
     Removes all entries from the event log. Used right before golden ami capture for a clean slate image.
   #>
-  Write-Log -message 'flushing the Windows EventLog' -severity 'INFO'
-  wevtutil el | % { wevtutil cl $_ }
+  #Write-Log -message 'flushing the Windows EventLog' -severity 'INFO'
+  #wevtutil el | % { wevtutil cl $_ }
 }
 
 function Set-PagefileSize {
