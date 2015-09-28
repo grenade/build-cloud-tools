@@ -1,12 +1,12 @@
 <script>ECHO OFF
-IF /i "%%COMPUTERNAME:-golden=%%"=="%%COMPUTERNAME%%" IF /i "%%COMPUTERNAME:-ec2-=%%"=="%%COMPUTERNAME%%" (
-mkdir %%PROGRAMDATA%%\Mozilla\RelOps
-icacls %%PROGRAMDATA%%\Mozilla\RelOps /inheritance:r
-echo [deploy]>%%PROGRAMDATA%%\Mozilla\RelOps\ec2.ini
-echo username=deploy>>%%PROGRAMDATA%%\Mozilla\RelOps\ec2.ini
-echo password={password}>>%%PROGRAMDATA%%\Mozilla\RelOps\ec2.ini
-echo hostname=releng-puppet2.srv.releng.scl3.mozilla.com>>%%PROGRAMDATA%%\Mozilla\RelOps\ec2.ini
-icacls %%PROGRAMDATA%%\Mozilla\RelOps\ec2.ini /deny Everyone:(D)
+IF NOT "%COMPUTERNAME:-ec2-=%"=="%COMPUTERNAME%" (
+mkdir %PROGRAMDATA%\Mozilla\RelOps
+echo [deploy]>%PROGRAMDATA%\Mozilla\RelOps\ec2.ini
+echo username=deploy>>%PROGRAMDATA%\Mozilla\RelOps\ec2.ini
+echo password={password}>>%PROGRAMDATA%\Mozilla\RelOps\ec2.ini
+echo hostname=releng-puppet2.srv.releng.scl3.mozilla.com>>%PROGRAMDATA%\Mozilla\RelOps\ec2.ini
+icacls %PROGRAMDATA%\Mozilla\RelOps /inheritance:r
+icacls %PROGRAMDATA%\Mozilla\RelOps\ec2.ini /deny Everyone:(D)
 )
 </script>
 <powershell><#
@@ -75,7 +75,7 @@ param (
 )
 $bat = ('{{0}}\Amazon\Ec2ConfigService\Scripts\UserScript.bat' -f $env:ProgramFiles)
 if (Test-Path $bat) {{
-  #Remove-Item -path $bat -force
+  Remove-Item -path $bat -force
 }}
 
 # runtime configuration
