@@ -77,6 +77,7 @@ $bat = ('{{0}}\Amazon\Ec2ConfigService\Scripts\UserScript.bat' -f $env:ProgramFi
 if (Test-Path $bat) {{
   Remove-Item -path $bat -force
 }}
+"time /t" | Out-File $bat -force
 
 # runtime configuration
 $runLog = [IO.Path]::Combine($logDir, 'userdata-run.log')
