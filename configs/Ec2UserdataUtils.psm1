@@ -258,7 +258,7 @@ function Install-Certificates {
       'key' = ('{0}\private_keys\{1}.{2}.pem' -f $sslPath, $env:COMPUTERNAME, $env:USERDOMAIN)
     }
   )
-  if ((Test-Path $certs['ca']) -and (Test-Path $certs['pub']) -and (Test-Path $certs['key'])) {
+  if ((Test-Path $certs['ca']) -and ((Get-Item $certs['ca']).length -gt 0) -and (Test-Path $certs['pub']) -and ((Get-Item $certs['pub']).length -gt 0) -and (Test-Path $certs['key']) -and ((Get-Item $certs['key']).length -gt 0)) {
     Write-Log -message ("{0} :: certificates detected" -f $($MyInvocation.MyCommand.Name)) -severity 'INFO'
     return $true
   } elseif (Test-Path $ini) {
@@ -278,10 +278,12 @@ function Install-Certificates {
     $wc.Credentials = $cc
     [Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
     Invoke-Command -ScriptBlock {
+      $wd = $(Get-Location).Path
       cd $sslPath
       $shArgs = @('set', 'PATH=/c/Program Files/Git/usr/bin:$PATH')
       & ('{0}\Git\usr\bin\sh' -f $env:ProgramFiles) $shArgs
       $wc.DownloadString($url) | & ('{0}\Git\usr\bin\sh' -f $env:ProgramFiles)
+      cd $wd
       # todo: set permissions on downloaded key files
     }
     return $true
@@ -925,8 +927,13 @@ function Rename-Admin {
 function Install-RelOpsPrerequisites {
   Install-Package -id 'sublimetext3' -version '3.0.0.3083' -testPath ('{0}\Sublime Text 3\sublime_text.exe' -f $env:ProgramFiles)
   Install-Package -id 'sublimetext3.packagecontrol' -version '2.0.0.20140915' -testPath ('{0}\Sublime Text 3\Installed Packages\Package Control.sublime-package' -f $env:AppData)
-  Install-Package -id 'puppet-agent' -version '1.2.4' -testPath ('{0}\Puppet Labs\Puppet\bin\puppet.bat' -f $env:ProgramFiles)
+  Install-Package -id 'puppet' -version '3.7.4' -testPath ('{0}\Puppet Labs\Puppet\bin\puppet.bat' -f $env:ProgramFiles)
+  #Install-Package -id 'puppet-agent' -version '1.2.4' -testPath ('{0}\Puppet Labs\Puppet\bin\puppet.bat' -f $env:ProgramFiles)
   Install-Package -id 'git' -version '2.5.3' -testPath ('{0}\Git\usr\bin\bash.exe' -f $env:ProgramFiles)
+  $msys = ('{0}\Git\usr\bin' -f $env:ProgramFiles)
+  if ((Test-Path $msys) -and !$env:Path.Contains($msys)) {
+    [Environment]::SetEnvironmentVariable("PATH", ('{0};{1}' -f $msys, $env:Path), "Machine")
+  }
 }
 
 function Install-MozillaBuildPrerequisites {

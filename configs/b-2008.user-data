@@ -75,7 +75,7 @@ param (
 )
 $bat = ('{{0}}\Amazon\Ec2ConfigService\Scripts\UserScript.bat' -f $env:ProgramFiles)
 if (Test-Path $bat) {{
-  Remove-Item -path $bat -force
+  #Remove-Item -path $bat -force
 }}
 
 # runtime configuration
