@@ -95,6 +95,17 @@ function Enable-UserdataPersist {
   .Parameter ec2SettingsFile
     The full path to the config file for Ec2ConfigService.
   #>
+  $startup = ('{0}\System32\GroupPolicy\Machine\Scripts\Startup' -f $env:SystemRoot)
+  $userscript = ('{0}\Amazon\EC2ConfigService\Scripts\UserScript.ps1' -f $env:ProgramFiles)
+  if (!(Test-Path $startup)) {
+    New-Item -ItemType Directory -Force -Path $startup
+  }
+  if ((Test-Path $userscript) -and !(Test-Path ('{0}\UserScript.ps1' -f $startup))) {
+    Set-ExecutionPolicy RemoteSigned -force
+    Copy-Item $userscript $startup
+    Disable-Service -serviceName 'EC2Config'
+  }
+  <#
   param (
     [string] $ec2SettingsFile = "C:\Program Files\Amazon\Ec2ConfigService\Settings\Config.xml"
   )
@@ -139,6 +150,7 @@ function Enable-UserdataPersist {
       Write-Log -message ("{0} :: failed to remove access for: {1}, on: {2}. {3}" -f $($MyInvocation.MyCommand.Name), $acc, $ec2SettingsFile, $_.Exception) -severity 'WARN'
     }
   }
+  #>
 }
 
 function Stop-ComputerWithDelay {
@@ -308,7 +320,8 @@ function Run-Puppet {
   #>
   param (
     [string] $puppetServer = 'puppet',
-    [string] $logdest
+    [string] $logdest,
+    [string] $environment = $null
   )
   if (Install-Certificates) {
     $puppetConfig = @{
@@ -329,7 +342,11 @@ function Run-Puppet {
     Out-IniFile -InputObject $puppetConfig -FilePath ('{0}\PuppetLabs\puppet\etc\puppet.conf' -f $env:ProgramData) -Encoding "ASCII" -Force
     Write-Log -message ("{0} :: running puppet agent, logging to: {1}" -f $($MyInvocation.MyCommand.Name), $logdest) -severity 'INFO'
     $puppetArgs = @('agent', '--test', '--detailed-exitcodes', '--server', $puppetServer, '--logdest', $logdest)
-    & 'puppet' $puppetArgs
+    if ($environment -ne $null) {
+      $puppetArgs += '--environment'
+      $puppetArgs += $environment
+    }
+    & ('{0}\Puppet Labs\Puppet\bin\puppet' -f $env:ProgramFiles) $puppetArgs
   } else {
     Write-Log -message ("{0} :: not attempting puppet agent run" -f $($MyInvocation.MyCommand.Name)) -severity 'DEBUG'
   }
