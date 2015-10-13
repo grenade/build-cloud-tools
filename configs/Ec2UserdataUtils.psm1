@@ -912,20 +912,29 @@ function Create-LocalUser {
   )
   try {
     $u = ([ADSI]"WinNT://.").Create("User", $username)
-    $u.SetPassword($password)
-    $u.SetInfo()
-    $u.Description = $description
     $u.SetInfo()
     Write-Log -message ("{0} :: user: {1}, created" -f $($MyInvocation.MyCommand.Name), $username) -severity 'DEBUG'
+    try {
+      $u.SetPassword($password)
+      $u.SetInfo()
+      $u.Description = $description
+      $u.SetInfo()
+      Write-Log -message ("{0} :: password, description set for user: {1}" -f $($MyInvocation.MyCommand.Name), $username) -severity 'DEBUG'
+    } catch {
+      Write-Log -message ("{0} :: failed to set password, description for user: {1}, {2}" -f $($MyInvocation.MyCommand.Name), $username, $_.Exception) -severity 'ERROR'
+    }
+    Start-Sleep -s 2
+    try {
+      #$a = [ADSI]"WinNT://./Administrators,group"
+      #$a.Add("WinNT://./$username,user")
+      $netArgs = @('localgroup', 'Administrators', '/add', $username)
+      & 'net' $netArgs
+      Write-Log -message ("{0} :: user: {1}, with path: {2}, added to local admin group" -f $($MyInvocation.MyCommand.Name), $username, $u.Path) -severity 'DEBUG'
+    } catch {
+      Write-Log -message ("{0} :: failed to add user: {1}, with path: {2}, to local admin group. {3}" -f $($MyInvocation.MyCommand.Name), $username, $u.Path, $_.Exception) -severity 'ERROR'
+    }
   } catch {
     Write-Log -message ("{0} :: failed to create user: {1}, {2}" -f $($MyInvocation.MyCommand.Name), $username, $_.Exception) -severity 'ERROR'
-  }
-  try {
-    $a = [ADSI]"WinNT://./Administrators,group"
-    $a.Add(([ADSI]"WinNT://./$username,user").Path)
-    Write-Log -message ("{0} :: user: {1}, added to local admin group" -f $($MyInvocation.MyCommand.Name), $username) -severity 'DEBUG'
-  } catch {
-    Write-Log -message ("{0} :: failed to add user: {1}, to local admin group. {2}" -f $($MyInvocation.MyCommand.Name), $username, $_.Exception) -severity 'ERROR'
   }
 }
 
@@ -988,9 +997,16 @@ function Install-BuildBot {
       Add-PathToPath -path ('{0}\mozilla-build\msys\bin' -f $env:SystemDrive) -target 'Machine'
       Add-PathToPath -path ('{0}\mozilla-build\python' -f $env:SystemDrive) -target 'Machine'
       Add-PathToPath -path ('{0}\mozilla-build\python\Scripts' -f $env:SystemDrive) -target 'Machine'
-      $bashArgs = @('--login', '-c', '"virtualenv /c/mozilla-build/buildbotve && /c/mozilla-build/buildbotve/Scripts/pip install --trusted-host=puppetagain.pub.build.mozilla.org --find-links=http://puppetagain.pub.build.mozilla.org/data/python/packages/ --no-index --no-deps zope.interface==3.6.1 buildbot-slave==0.8.4-pre-moz8 buildbot==0.8.4-pre-moz8 Twisted==10.2.0 simplejson==2.1.3"')
+      $bashArgs = @('--login', '-c', '"virtualenv /c/mozilla-build/buildbotve --system-site-packages && /c/mozilla-build/buildbotve/Scripts/pip install --trusted-host=puppetagain.pub.build.mozilla.org --find-links=http://puppetagain.pub.build.mozilla.org/data/python/packages/ --no-index --no-deps zope.interface==3.6.1 buildbot-slave==0.8.4-pre-moz8 buildbot==0.8.4-pre-moz8 Twisted==10.2.0 simplejson==2.1.3"')
       & 'bash' $bashArgs
+      Write-Log -message ('{0} :: pywin32 installed to /c/mozilla-build/buildbotve/Lib/site-packages/pywin32-218-py2.7-win32.egg' -f $($MyInvocation.MyCommand.Name), $version, $target, $url) -severity 'DEBUG'
+
+      $bashArgs = @('--login', '-c', '"/c/mozilla-build/buildbotve/Scripts/easy_install.exe http://releng-puppet1.srv.releng.use1.mozilla.com/repos/EXEs/pywin32-218.win32-py2.7.exe"')
+      & 'bash' $bashArgs
+      
       Write-Log -message ('{0} :: buildbot virtualenv (with zope.interface, buildbot-slave, buildbot, Twisted and simplejson) installed to /c/mozilla-build/buildbotve' -f $($MyInvocation.MyCommand.Name), $version, $target, $url) -severity 'DEBUG'
+      Create-SymbolicLink -link ('{0}\mozilla-build\virtualenv.py' -f $env:SystemDrive) -target ('{0}\mozilla-build\python\Lib\site-packages\virtualenv.py' -f $env:SystemDrive)
+      Create-SymbolicLink -link ('{0}\mozilla-build\buildbotve\virtualenv.py' -f $env:SystemDrive) -target ('{0}\mozilla-build\python\Lib\site-packages\virtualenv.py' -f $env:SystemDrive)
     } catch {
       Write-Log -message ("{0} :: failed to install buildbot virtualenv. {1}" -f $($MyInvocation.MyCommand.Name), $_.Exception) -severity 'ERROR'
     }
