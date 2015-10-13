@@ -452,12 +452,17 @@ function Set-Aggregator {
   )
   $conf = ('{0}\nxlog\conf\nxlog_target_aggregator.conf' -f ${env:ProgramFiles(x86)})
   if (Test-Path $conf) {
-    (Get-Content $conf) | 
-      Foreach-Object { $_ -replace "(Host [^ ]*)", "Host $aggregator" } | 
-        Set-Content $conf
-    Restart-Service nxlog
+    (Get-Content $conf) | Foreach-Object { $_ -replace "(Host .*)", "Host $aggregator" } | Set-Content $conf
+    (Get-Content $conf) | Foreach-Object { $_ -replace "(Port .*)", "Port 1514" } | Set-Content $conf
     Write-Log -message "log aggregator set to: $aggregator" -severity 'INFO'
   }
+  $conf = ('{0}\nxlog\conf\nxlog.conf' -f ${env:ProgramFiles(x86)})
+  if (Test-Path $conf) {
+    (Get-Content $conf) | Foreach-Object { $_ -replace "(define ROOT .*)", ('define ROOT {0}\nxlog' -f ${env:ProgramFiles(x86)}) } | Set-Content $conf
+    (Get-Content $conf) | Foreach-Object { $_ -replace "(include .*)", 'include %ROOT%\conf\nxlog_*.conf' } | Set-Content $conf
+    Write-Log -message "nxlog include config adjusted" -severity 'INFO'
+  }
+  Restart-Service nxlog
 }
 
 function Disable-Firewall {
@@ -1048,8 +1053,11 @@ function Install-DirectX10 {
 }
 
 function Install-RelOpsPrerequisites {
+  param (
+    [string] $aggregator
+  )
   Install-Package -id 'nxlog' -version '2.8.1248' -testPath ('{0}\nxlog\conf\nxlog.conf' -f ${env:ProgramFiles(x86)})
-  Configure-NxLog
+  Configure-NxLog -aggregator $aggregator
   Install-Package -id 'sublimetext3' -version '3.0.0.3083' -testPath ('{0}\Sublime Text 3\sublime_text.exe' -f $env:ProgramFiles)
   Install-Package -id 'sublimetext3.packagecontrol' -version '2.0.0.20140915' -testPath ('{0}\Sublime Text 3\Installed Packages\Package Control.sublime-package' -f $env:AppData)
   #Install-Package -id 'puppet' -version '3.7.4' -testPath ('{0}\Puppet Labs\Puppet\bin\puppet.bat' -f $env:ProgramFiles)
@@ -1089,9 +1097,12 @@ function Install-MozillaBuildAndPrerequisites {
 }
 
 function Install-BasePrerequisites {
+  param (
+    [string] $aggregator = 'log-aggregator.srv.releng.use1.mozilla.com'
+  )
   Write-Log -message ("{0} :: installing chocolatey" -f $($MyInvocation.MyCommand.Name)) -severity 'INFO'
   Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
-  Install-RelOpsPrerequisites
+  Install-RelOpsPrerequisites -aggregator $aggregator
   Install-MozillaBuildAndPrerequisites
   Install-BuildBot
 }
@@ -1109,21 +1120,21 @@ function Configure-NxLog {
     [string] $version = '21b5392348c3', # latest: 'default'
     [string] $url = ('https://hg.mozilla.org/build/puppet/raw-file/{0}/modules/nxlog/templates' -f $version), # latest: 'default'
     [string] $target = ('{0}\nxlog\conf' -f ${env:ProgramFiles(x86)}),
-    [string[]] $files = @('nxlog_source_eventlog_win2008_ec2.conf', 'nxlog_route_eventlog_aggregator.conf', 'nxlog_target_aggregator.conf', 'nxlog_transform_syslog.conf')
+    [string[]] $files = @('nxlog.conf', 'nxlog_source_eventlog_win2008_ec2.conf', 'nxlog_route_eventlog_aggregator.conf', 'nxlog_target_aggregator.conf', 'nxlog_transform_syslog.conf'),
+    [string] $aggregator
   )
   foreach ($file in $files) {
-    if(!(Test-Path ('{0}\{1}' -f $target, $file))) {
-      $remote = ('{0}/{1}.erb' -f $url, $file)
-      $local = ('{0}\{1}' -f $target, $file)
-      try {
-        (New-Object Net.WebClient).DownloadFile($remote, $local)
-        Write-Log -message ("{0} :: downloaded: {1} from: {2}" -f $($MyInvocation.MyCommand.Name), $local, $remote) -severity 'DEBUG'
-      }
-      catch {
-        Write-Log -message ("{0} :: failed to download: {1} from: {2}. {3}" -f $($MyInvocation.MyCommand.Name), $local, $remote, $_.Exception) -severity 'ERROR'
-      }
+    $remote = ('{0}/{1}.erb' -f $url, $file)
+    $local = ('{0}\{1}' -f $target, $file)
+    try {
+      (New-Object Net.WebClient).DownloadFile($remote, $local)
+      Write-Log -message ("{0} :: downloaded: {1} from: {2}" -f $($MyInvocation.MyCommand.Name), $local, $remote) -severity 'DEBUG'
+    }
+    catch {
+      Write-Log -message ("{0} :: failed to download: {1} from: {2}. {3}" -f $($MyInvocation.MyCommand.Name), $local, $remote, $_.Exception) -severity 'ERROR'
     }
   }
+  Set-Aggregator -aggregator $aggregator
 }
 
 function Run-BuildBot {

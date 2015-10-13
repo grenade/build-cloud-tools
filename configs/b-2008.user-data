@@ -103,7 +103,7 @@ Set-Timezone
 Disable-Firewall 
 Disable-WindowsUpdate
 
-Install-BasePrerequisites
+Install-BasePrerequisites -aggregator $aggregator
 Rename-Admin
 
 $hostnameCorrect = (Is-HostnameSetCorrectly -hostnameExpected $hostname)
@@ -115,9 +115,9 @@ if ($hostnameCorrect -and $domainCorrect) {{
   Set-Domain -domain $domain
   Stop-ComputerWithDelay -reason 'userdata run complete' -restart
 }}
-Send-Log -logfile $runLog -subject ('UserData Run Report for {{0}}.{{1}}' -f $hostname, $domain) -to 'rthijssen@mozilla.com' -from $logSender
+Send-Log -logfile $runLog -subject ('UserData Run Report for {{0}}.{{1}}' -f $hostname, $domain) -to 'releng-puppet-mail@mozilla.com' -from $logSender
 Move-Item -path $runLog -destination ([IO.Path]::Combine($logDir, ('userdata-run-{{0}}.log' -f [DateTime]::Now.ToString("yyyyMMdd-HHmm"))))
-Send-Log -logfile $ec2Log -subject ('EC2 Config Report for {{0}}.{{1}}' -f $hostname, $domain) -to 'rthijssen@mozilla.com' -from $logSender
+Send-Log -logfile $ec2Log -subject ('EC2 Config Report for {{0}}.{{1}}' -f $hostname, $domain) -to 'releng-puppet-mail@mozilla.com' -from $logSender
 Move-Item -path $ec2Log -destination ([IO.Path]::Combine($logDir, ('ec2config-run-{{0}}.log' -f [DateTime]::Now.ToString("yyyyMMdd-HHmm"))))
 </powershell>
 <persist>true</persist>
