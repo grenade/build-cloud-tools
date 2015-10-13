@@ -62,8 +62,7 @@ param (
   [string] $logSender = ('{{0}}@{{1}}.{{2}}' -f $env:USERNAME, $hostname, $domain),
   [string[]] $logRecipients = @('releng-puppet-mail@mozilla.com'),
 
-  [string] $buildUsername = 'cltbld',
-  [string] $buildPassword = 'o770PeAt0wbx5yG'
+  [string] $buildUsername = 'cltbld'
 )
 # runtime configuration
 $runLog = [IO.Path]::Combine($logDir, 'userdata-run.log')
@@ -110,7 +109,7 @@ Rename-Admin
 $hostnameCorrect = (Is-HostnameSetCorrectly -hostnameExpected $hostname)
 $domainCorrect = (Is-DomainSetCorrectly -domainExpected $domain)
 if ($hostnameCorrect -and $domainCorrect) {{
-  Run-BuildBot -username $buildUsername -password $buildPassword
+  Run-BuildBot -username $buildUsername -password (New-SWRandomPassword -PasswordLength 16)
 }} else {{
   Set-Hostname -hostname $hostname
   Set-Domain -domain $domain
