@@ -92,7 +92,8 @@ def create_instance(name, config, region, key_name, ssh_key, instance_data,
             # Overwrite root device size for HVM instances, since they cannot
             # be resized online
             if ami.virtualization_type == "hvm" and \
-                    ami.root_device_name == device:
+                    ami.root_device_name == device and \
+                    "-2008" not in config['type']:
                 bd.size = ami.block_device_mapping[ami.root_device_name].size
             if device_info.get("delete_on_termination") is not False:
                 bd.delete_on_termination = True
