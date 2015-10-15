@@ -998,10 +998,11 @@ function Install-BuildBot {
       Add-PathToPath -path ('{0}\mozilla-build\python' -f $env:SystemDrive) -target 'Machine'
       Add-PathToPath -path ('{0}\mozilla-build\python\Scripts' -f $env:SystemDrive) -target 'Machine'
 
-      $bashArgs = @('--login', '-c', '"virtualenv /c/mozilla-build/buildbotve --system-site-packages && /c/mozilla-build/buildbotve/Scripts/pip install --trusted-host=puppetagain.pub.build.mozilla.org --find-links=http://puppetagain.pub.build.mozilla.org/data/python/packages/ --no-index --no-deps zope.interface==3.6.1 buildbot-slave==0.8.4-pre-moz8 buildbot==0.8.4-pre-moz8 Twisted==10.2.0 simplejson==2.1.3"')
-      & 'bash' $bashArgs
-      Write-Log -message ('{0} :: buildbot virtualenv (with zope.interface, buildbot-slave, buildbot, Twisted and simplejson) installed to /c/mozilla-build/buildbotve' -f $($MyInvocation.MyCommand.Name), $version, $target, $url) -severity 'DEBUG'
-
+      if (!(Test-Path 'c:\mozilla-build\buildbotve\Scripts\python.exe')) {
+        $bashArgs = @('--login', '-c', '"virtualenv /c/mozilla-build/buildbotve --system-site-packages && /c/mozilla-build/buildbotve/Scripts/pip install --trusted-host=puppetagain.pub.build.mozilla.org --find-links=http://puppetagain.pub.build.mozilla.org/data/python/packages/ --no-index --no-deps zope.interface==3.6.1 buildbot-slave==0.8.4-pre-moz8 buildbot==0.8.4-pre-moz8 Twisted==10.2.0 simplejson==2.1.3"')
+        & 'bash' $bashArgs
+        Write-Log -message ('{0} :: buildbot virtualenv (with zope.interface, buildbot-slave, buildbot, Twisted and simplejson) installed to /c/mozilla-build/buildbotve' -f $($MyInvocation.MyCommand.Name), $version, $target, $url) -severity 'DEBUG'
+      }
       if (!(Test-Path 'c:\mozilla-build\buildbotve\Lib\site-packages\pywin32-218-py2.7-win32.egg' -PathType Container)) {
         $bashArgs = @('--login', '-c', '"/c/mozilla-build/buildbotve/Scripts/easy_install.exe http://releng-puppet1.srv.releng.use1.mozilla.com/repos/EXEs/pywin32-218.win32-py2.7.exe"')
         & 'bash' $bashArgs
@@ -1106,6 +1107,11 @@ function Install-MozillaBuildAndPrerequisites {
   Install-Package -id 'visualstudiocommunity2013' -version '12.0.21005.1' -testPath ('{0}\Microsoft Visual Studio 12.0\Common7\IDE\devenv.exe' -f ${env:ProgramFiles(x86)})
   Install-Package -id 'windows-sdk-8.1' -version '8.100.26654.0' -testPath ('{0}\Microsoft Visual Studio 12.0\Common7\IDE\devenv.exe' -f ${env:ProgramFiles(x86)})
   Install-Package -id 'mozillabuild' -version '2.0.0' -testPath ('{0}\mozilla-build\yasm\yasm.exe' -f $env:SystemDrive)
+  if (!(Test-Path 'c:\mozilla-build\python\Lib\site-packages\pywin32-218-py2.7-win32.egg' -PathType Container)) {
+    $bashArgs = @('--login', '-c', '"/c/mozilla-build/python/Scripts/easy_install.exe http://releng-puppet1.srv.releng.use1.mozilla.com/repos/EXEs/pywin32-218.win32-py2.7.exe"')
+    & 'bash' $bashArgs
+    Write-Log -message ('{0} :: pywin32 installed to /c/mozilla-build/python/Lib/site-packages/pywin32-218-py2.7-win32.egg' -f $($MyInvocation.MyCommand.Name), $version, $target, $url) -severity 'DEBUG'
+  }
   if (Install-Package -id 'hg' -version '3.5.1' -testPath ('{0}\Mercurial\hg.exe' -f $env:ProgramFiles)) {
     Create-SymbolicLink -link [IO.Path]::Combine([IO.Path]::Combine(('{0}\' -f $env:SystemDrive), 'mozilla-build'), 'hg') -target [IO.Path]::Combine($env:ProgramFiles, 'Mercurial')
   }
@@ -1200,9 +1206,9 @@ function Run-BuildBot {
       Add-PathToPath -path ('{0}\mozilla-build\python' -f $env:SystemDrive) -target 'User'
       Add-PathToPath -path ('{0}\mozilla-build\python\Scripts' -f $env:SystemDrive) -target 'User'
 
+      Write-Log -message ("{0} :: starting buildbot" -f $($MyInvocation.MyCommand.Name)) -severity 'INFO'
       $bashArgs = @('--login', '-c', '"/c/mozilla-build/buildbotve/Scripts/python /c/mozilla-build/buildbot.py --twistd-cmd /c/mozilla-build/buildbotve/Scripts/twistd.py"')
       & 'bash' $bashArgs
-
       Write-Log -message ("{0} :: buildbot started" -f $($MyInvocation.MyCommand.Name)) -severity 'INFO'
     }
   }
