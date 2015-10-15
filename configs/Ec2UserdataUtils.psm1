@@ -1106,11 +1106,20 @@ function Install-MozillaBuildAndPrerequisites {
   Install-DirectX10
   Install-Package -id 'visualstudiocommunity2013' -version '12.0.21005.1' -testPath ('{0}\Microsoft Visual Studio 12.0\Common7\IDE\devenv.exe' -f ${env:ProgramFiles(x86)})
   Install-Package -id 'windows-sdk-8.1' -version '8.100.26654.0' -testPath ('{0}\Microsoft Visual Studio 12.0\Common7\IDE\devenv.exe' -f ${env:ProgramFiles(x86)})
-  Install-Package -id 'mozillabuild' -version '2.0.0' -testPath ('{0}\mozilla-build\yasm\yasm.exe' -f $env:SystemDrive)
-  if (!(Test-Path 'c:\mozilla-build\python\Lib\site-packages\pywin32-218-py2.7-win32.egg' -PathType Container)) {
-    $bashArgs = @('--login', '-c', '"/c/mozilla-build/python/Scripts/easy_install.exe http://releng-puppet1.srv.releng.use1.mozilla.com/repos/EXEs/pywin32-218.win32-py2.7.exe"')
-    & 'bash' $bashArgs
-    Write-Log -message ('{0} :: pywin32 installed to /c/mozilla-build/python/Lib/site-packages/pywin32-218-py2.7-win32.egg' -f $($MyInvocation.MyCommand.Name), $version, $target, $url) -severity 'DEBUG'
+  if(Install-Package -id 'mozillabuild' -version '2.0.0' -testPath ('{0}\mozilla-build\yasm\yasm.exe' -f $env:SystemDrive)) {
+    Create-SymbolicLink -link ('{0}\mozilla-build\python27' -f $env:SystemDrive) -target ('{0}\mozilla-build\python' -f $env:SystemDrive)
+    if (!(Test-Path 'c:\mozilla-build\python\Lib\site-packages\pywin32-218-py2.7-win32.egg' -PathType Container)) {
+      $bashArgs = @('--login', '-c', '"/c/mozilla-build/python/Scripts/easy_install.exe http://releng-puppet1.srv.releng.use1.mozilla.com/repos/EXEs/pywin32-218.win32-py2.7.exe"')
+      & 'bash' $bashArgs
+      Write-Log -message ('{0} :: pywin32 installed to /c/mozilla-build/python/Lib/site-packages/pywin32-218-py2.7-win32.egg' -f $($MyInvocation.MyCommand.Name), $version, $target, $url) -severity 'DEBUG'
+    }
+    $bashArgs = @('--login', '-c', '"/c/mozilla-build/python/Scripts/pip uninstall mercurial --yes"')
+    & ('{0}\mozilla-build\msys\bin\bash.exe' -f $env:SystemDrive) $bashArgs
+    foreach ($mbhg in @(('{0}\mozilla-build\python\Scripts\hg' -f $env:SystemDrive), ('{0}\mozilla-build\python\Scripts\hg.bat' -f $env:SystemDrive), ('{0}\mozilla-build\python\Scripts\hg.exe' -f $env:SystemDrive))) {
+      if (Test-Path $mbhg) {
+        Remove-Item $mbhg -force
+      }
+    }
   }
   if (Install-Package -id 'hg' -version '3.5.1' -testPath ('{0}\Mercurial\hg.exe' -f $env:ProgramFiles)) {
     Create-SymbolicLink -link [IO.Path]::Combine([IO.Path]::Combine(('{0}\' -f $env:SystemDrive), 'mozilla-build'), 'hg') -target [IO.Path]::Combine($env:ProgramFiles, 'Mercurial')
