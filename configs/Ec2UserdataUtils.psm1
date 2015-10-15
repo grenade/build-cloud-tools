@@ -997,14 +997,17 @@ function Install-BuildBot {
       Add-PathToPath -path ('{0}\mozilla-build\msys\bin' -f $env:SystemDrive) -target 'Machine'
       Add-PathToPath -path ('{0}\mozilla-build\python' -f $env:SystemDrive) -target 'Machine'
       Add-PathToPath -path ('{0}\mozilla-build\python\Scripts' -f $env:SystemDrive) -target 'Machine'
+
       $bashArgs = @('--login', '-c', '"virtualenv /c/mozilla-build/buildbotve --system-site-packages && /c/mozilla-build/buildbotve/Scripts/pip install --trusted-host=puppetagain.pub.build.mozilla.org --find-links=http://puppetagain.pub.build.mozilla.org/data/python/packages/ --no-index --no-deps zope.interface==3.6.1 buildbot-slave==0.8.4-pre-moz8 buildbot==0.8.4-pre-moz8 Twisted==10.2.0 simplejson==2.1.3"')
       & 'bash' $bashArgs
-      Write-Log -message ('{0} :: pywin32 installed to /c/mozilla-build/buildbotve/Lib/site-packages/pywin32-218-py2.7-win32.egg' -f $($MyInvocation.MyCommand.Name), $version, $target, $url) -severity 'DEBUG'
-
-      $bashArgs = @('--login', '-c', '"/c/mozilla-build/buildbotve/Scripts/easy_install.exe http://releng-puppet1.srv.releng.use1.mozilla.com/repos/EXEs/pywin32-218.win32-py2.7.exe"')
-      & 'bash' $bashArgs
-      
       Write-Log -message ('{0} :: buildbot virtualenv (with zope.interface, buildbot-slave, buildbot, Twisted and simplejson) installed to /c/mozilla-build/buildbotve' -f $($MyInvocation.MyCommand.Name), $version, $target, $url) -severity 'DEBUG'
+
+      if (!(Test-Path 'c:\mozilla-build\buildbotve\Lib\site-packages\pywin32-218-py2.7-win32.egg' -PathType Container)) {
+        $bashArgs = @('--login', '-c', '"/c/mozilla-build/buildbotve/Scripts/easy_install.exe http://releng-puppet1.srv.releng.use1.mozilla.com/repos/EXEs/pywin32-218.win32-py2.7.exe"')
+        & 'bash' $bashArgs
+        Write-Log -message ('{0} :: pywin32 installed to /c/mozilla-build/buildbotve/Lib/site-packages/pywin32-218-py2.7-win32.egg' -f $($MyInvocation.MyCommand.Name), $version, $target, $url) -severity 'DEBUG'
+      }
+      
       Create-SymbolicLink -link ('{0}\mozilla-build\virtualenv.py' -f $env:SystemDrive) -target ('{0}\mozilla-build\python\Lib\site-packages\virtualenv.py' -f $env:SystemDrive)
       Create-SymbolicLink -link ('{0}\mozilla-build\buildbotve\virtualenv.py' -f $env:SystemDrive) -target ('{0}\mozilla-build\python\Lib\site-packages\virtualenv.py' -f $env:SystemDrive)
     } catch {
