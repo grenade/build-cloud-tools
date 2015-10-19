@@ -1015,7 +1015,33 @@ function Install-BuildBot {
       Create-SymbolicLink -link ('{0}\mozilla-build\virtualenv.py' -f $env:SystemDrive) -target ('{0}\mozilla-build\python\Lib\site-packages\virtualenv.py' -f $env:SystemDrive)
       #Create-SymbolicLink -link ('{0}\mozilla-build\python\virtualenv.py' -f $env:SystemDrive) -target ('{0}\mozilla-build\python\Lib\site-packages\virtualenv.py' -f $env:SystemDrive)
     } catch {
-      Write-Log -message ("{0} :: failed to install buildbot virtualenv. {1}" -f $($MyInvocation.MyCommand.Name), $_.Exception) -severity 'ERROR'
+      Write-Log -message ("{0} :: failed to install buildbot. {1}" -f $($MyInvocation.MyCommand.Name), $_.Exception) -severity 'ERROR'
+    }
+  }
+  end {
+    Write-Log -message ("{0} :: Function ended" -f $($MyInvocation.MyCommand.Name)) -severity 'DEBUG'
+  }
+}
+
+function Install-ToolTool {
+  param (
+    [string] $version = 'ee2f1b1a5fdc', # latest: 'default'
+    [string] $url = ('https://hg.mozilla.org/build/puppet/raw-file/{0}/modules/packages/templates/tooltool.py' -f $version),
+    [string] $target = ('{0}\mozilla-build\tooltool.py' -f $env:SystemDrive)
+  )
+  begin {
+    Write-Log -message ("{0} :: Function started" -f $($MyInvocation.MyCommand.Name)) -severity 'DEBUG'
+  }
+  process {
+    try {
+      if (Test-Path $target) {
+        Write-Log -message ('{0} :: removing detected tooltool at: {1}' -f $($MyInvocation.MyCommand.Name), $target) -severity 'DEBUG'
+        Remove-Item -path $target -force
+      }
+      (New-Object Net.WebClient).DownloadFile($url, $target)
+      Write-Log -message ('{0} :: tooltool run script (version: {1}) installed to: {2}, from: {3}' -f $($MyInvocation.MyCommand.Name), $version, $target, $url) -severity 'DEBUG'
+    } catch {
+      Write-Log -message ("{0} :: failed to download tooltool from {1} to: {2}, {3}" -f $($MyInvocation.MyCommand.Name), $url, $target, $_.Exception) -severity 'ERROR'
     }
   }
   end {
@@ -1142,6 +1168,7 @@ function Install-BasePrerequisites {
   Install-RelOpsPrerequisites -aggregator $aggregator
   Install-MozillaBuildAndPrerequisites
   Install-BuildBot
+  Install-ToolTool
 }
 
 function Set-Timezone {
