@@ -1154,7 +1154,7 @@ function Set-Timezone {
 
 function Configure-NxLog {
   param (
-    [string] $version = '21b5392348c3', # latest: 'default'
+    [string] $version = '12020ace67f4', # latest: 'default'
     [string] $url = ('https://hg.mozilla.org/build/puppet/raw-file/{0}/modules/nxlog/templates' -f $version), # latest: 'default'
     [string] $target = ('{0}\nxlog\conf' -f ${env:ProgramFiles(x86)}),
     [string[]] $files = @('nxlog.conf', 'nxlog_source_eventlog_win2008_ec2.conf', 'nxlog_route_eventlog_aggregator.conf', 'nxlog_target_aggregator.conf', 'nxlog_transform_syslog.conf'),
