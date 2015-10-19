@@ -87,8 +87,13 @@ function Download-Module {{
   )
   $filename = $url.Substring($url.LastIndexOf('/') + 1)
   $moduleName = [IO.Path]::GetFileNameWithoutExtension($filename)
-  New-Item -ItemType Directory -Force -Path ('{{0}}\{{1}}' -f $modulesPath, $moduleName)
-  (New-Object Net.WebClient).DownloadFile($url, ('{{0}}\{{1}}\{{2}}' -f $modulesPath, $moduleName, $filename))
+  $modulePath = ('{{0}}\{{1}}' -f $modulesPath, $moduleName)
+  if (Test-Path $modulePath) {{
+    Remove-Module $moduleName
+    Remove-Item -path $modulePath -recurse -force
+  }}
+  New-Item -ItemType Directory -Force -Path $modulePath
+  (New-Object Net.WebClient).DownloadFile($url, ('{{0}}\{{1}}' -f $modulePath, $filename))
 }}
 
 # download and import the Ec2UserdataUtils module
