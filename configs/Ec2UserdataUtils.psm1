@@ -1006,14 +1006,28 @@ function Install-BuildBot {
         & 'bash' $bashArgs
         Write-Log -message ('{0} :: zope.interface, buildbot-slave, buildbot, Twisted and simplejson installed to /c/mozilla-build/python' -f $($MyInvocation.MyCommand.Name), $version, $target, $url) -severity 'DEBUG'
       }
+      <#
+      if (!(Test-Path 'c:\mozilla-build\python\Lib\site-packages\wheel' -PathType Container)) {
+        $bashArgs = @('--login', '-c', '"pip install wheel==0.26.0"')
+        & 'bash' $bashArgs
+        Write-Log -message ('{0} :: wheel installed to /c/mozilla-build/python/Lib/site-packages/wheel' -f $($MyInvocation.MyCommand.Name), $version, $target, $url) -severity 'DEBUG'
+      }
+      #>
       if (!(Test-Path 'c:\mozilla-build\python\Lib\site-packages\pywin32-218-py2.7-win32.egg' -PathType Container)) {
         $bashArgs = @('--login', '-c', '"easy_install.exe http://releng-puppet1.srv.releng.use1.mozilla.com/repos/EXEs/pywin32-218.win32-py2.7.exe"')
         & 'bash' $bashArgs
         Write-Log -message ('{0} :: pywin32 installed to /c/mozilla-build/python/Lib/site-packages/pywin32-218-py2.7-win32.egg' -f $($MyInvocation.MyCommand.Name), $version, $target, $url) -severity 'DEBUG'
       }
-      
-      Create-SymbolicLink -link ('{0}\mozilla-build\virtualenv.py' -f $env:SystemDrive) -target ('{0}\mozilla-build\python\Lib\site-packages\virtualenv.py' -f $env:SystemDrive)
+      # buildbot seems to expect this virtualenv and these noddy paths to exist
+      Copy-Item ('{0}\mozilla-build\python\Lib\site-packages\virtualenv.py' -f $env:SystemDrive) ('{0}\mozilla-build' -f $env:SystemDrive) -Force
+      Copy-Item ('{0}\mozilla-build\python\Lib\site-packages\virtualenv.py' -f $env:SystemDrive) ('{0}\mozilla-build\python' -f $env:SystemDrive) -Force
+      #Create-SymbolicLink -link ('{0}\mozilla-build\virtualenv.py' -f $env:SystemDrive) -target ('{0}\mozilla-build\python\Lib\site-packages\virtualenv.py' -f $env:SystemDrive)
       #Create-SymbolicLink -link ('{0}\mozilla-build\python\virtualenv.py' -f $env:SystemDrive) -target ('{0}\mozilla-build\python\Lib\site-packages\virtualenv.py' -f $env:SystemDrive)
+      $veArgs = @(('{0}\mozilla-build\python\Lib\site-packages\virtualenv.py' -f $env:SystemDrive), '--no-site-packages', '--distribute', ('{0}\mozilla-build\buildbotve' -f $env:SystemDrive))
+      & 'python' $veArgs
+      Copy-Item ('{0}\mozilla-build\python\Lib\site-packages\virtualenv.py' -f $env:SystemDrive) ('{0}\mozilla-build\buildbotve' -f $env:SystemDrive) -Force
+      $pipArgs = @('install', 'setuptools==18.4', 'wheel==0.26.0')
+      & ('{0}\mozilla-build\buildbotve\Scripts\pip' -f $env:SystemDrive) $pipArgs
     } catch {
       Write-Log -message ("{0} :: failed to install buildbot. {1}" -f $($MyInvocation.MyCommand.Name), $_.Exception) -severity 'ERROR'
     }
@@ -1154,6 +1168,7 @@ function Install-MozillaBuildAndPrerequisites {
     Create-SymbolicLink -link ('{0}\mozilla-build\hg' -f $env:SystemDrive) -target ('{0}\Mercurial' -f $env:ProgramFiles)
   }
   Install-BundleClone
+  Add-PathToPath -path ('{0}\mozilla-build\hg' -f $env:SystemDrive)
   Add-PathToPath -path ('{0}\mozilla-build\msys\bin' -f $env:SystemDrive)
   Add-PathToPath -path ('{0}\mozilla-build\python' -f $env:SystemDrive)
   Add-PathToPath -path ('{0}\mozilla-build\python\Scripts' -f $env:SystemDrive)
@@ -1198,6 +1213,9 @@ function Configure-NxLog {
       Write-Log -message ("{0} :: failed to download: {1} from: {2}. {3}" -f $($MyInvocation.MyCommand.Name), $local, $remote, $_.Exception) -severity 'ERROR'
     }
   }
+  if ($aggregator.StartsWith('log-aggregator.srv')) {
+
+  }
   Set-Aggregator -aggregator $aggregator
 }
 
@@ -1241,6 +1259,7 @@ function Run-BuildBot {
       $env:IDLEIZER_HALT_ON_IDLE = 'true'
       [Environment]::SetEnvironmentVariable("IDLEIZER_HALT_ON_IDLE", $env:IDLEIZER_HALT_ON_IDLE, 'User')
 
+      Add-PathToPath -path ('{0}\mozilla-build\hg' -f $env:SystemDrive) -target 'User'
       Add-PathToPath -path ('{0}\mozilla-build\msys\bin' -f $env:SystemDrive) -target 'User'
       Add-PathToPath -path ('{0}\mozilla-build\python' -f $env:SystemDrive) -target 'User'
       Add-PathToPath -path ('{0}\mozilla-build\python\Scripts' -f $env:SystemDrive) -target 'User'
