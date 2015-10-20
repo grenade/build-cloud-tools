@@ -849,12 +849,14 @@ function Enable-BundleClone {
     Write-Log -message ("{0} :: Function started" -f $($MyInvocation.MyCommand.Name)) -severity 'DEBUG'
   }
   process {
-    Set-IniValue -file $hgrc -section 'extensions' -key 'bundleclone' -value $path
-    if ($domain.Contains(".usw2.")) {
-      Set-IniValue -file $hgrc -section 'bundleclone' -key 'prefers' -value "ec2region=us-west-2, stream=revlogv1"
+    if ($domain.Contains('.usw2.')) {
+      $ec2region = 'us-west-2'
     } else {
-      Set-IniValue -file $hgrc -section 'bundleclone' -key 'prefers' -value "ec2region=us-east-1, stream=revlogv1"
+      $ec2region = 'us-east-1'
     }
+    Set-IniValue -file $hgrc -section 'extensions' -key 'bundleclone' -value $path
+    Set-IniValue -file $hgrc -section 'bundleclone' -key 'prefers' -value ('ec2region={0}, stream=revlogv1' -f $ec2region)
+    Write-Log -message ("{0} :: bundleclone ec2region set to: {1}, for domain: {2}" -f $($MyInvocation.MyCommand.Name), $ec2region, $domain) -severity 'DEBUG'
   }
   end {
     Write-Log -message ("{0} :: Function ended" -f $($MyInvocation.MyCommand.Name)) -severity 'DEBUG'
@@ -1228,6 +1230,9 @@ function Run-BuildBot {
   $credential = New-Object Management.Automation.PSCredential ('.\{0}' -f $username), (ConvertTo-SecureString $password -AsPlainText -Force)
   try {
     Invoke-Command -ComputerName 'localhost' -Credential $credential -ScriptBlock {
+      param (
+        [string] $domain
+      )
       $hgrc = ('{0}\.hgrc' -f $env:UserProfile)
       Create-Hgrc -hgrc $hgrc
       if (Test-Path $hgrc) {
@@ -1257,7 +1262,7 @@ function Run-BuildBot {
       $bashArgs = @('--login', '-c', '"python /c/mozilla-build/buildbot.py --twistd-cmd /c/mozilla-build/python/Scripts/twistd.py"')
       & 'bash' $bashArgs
       Write-Log -message ("{0} :: buildbot started" -f $($MyInvocation.MyCommand.Name)) -severity 'INFO'
-    }
+    } -ArgumentList $domain
   }
   catch {
     Write-Log -message ("{0} :: failed to start buildbot. {1}" -f $($MyInvocation.MyCommand.Name), $_.Exception) -severity 'ERROR'
