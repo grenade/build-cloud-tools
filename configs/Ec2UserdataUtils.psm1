@@ -1006,28 +1006,17 @@ function Install-BuildBot {
         & 'bash' $bashArgs
         Write-Log -message ('{0} :: zope.interface, buildbot-slave, buildbot, Twisted and simplejson installed to /c/mozilla-build/python' -f $($MyInvocation.MyCommand.Name), $version, $target, $url) -severity 'DEBUG'
       }
-      <#
-      if (!(Test-Path 'c:\mozilla-build\python\Lib\site-packages\wheel' -PathType Container)) {
-        $bashArgs = @('--login', '-c', '"pip install wheel==0.26.0"')
-        & 'bash' $bashArgs
-        Write-Log -message ('{0} :: wheel installed to /c/mozilla-build/python/Lib/site-packages/wheel' -f $($MyInvocation.MyCommand.Name), $version, $target, $url) -severity 'DEBUG'
-      }
-      #>
       if (!(Test-Path 'c:\mozilla-build\python\Lib\site-packages\pywin32-218-py2.7-win32.egg' -PathType Container)) {
         $bashArgs = @('--login', '-c', '"easy_install.exe http://releng-puppet1.srv.releng.use1.mozilla.com/repos/EXEs/pywin32-218.win32-py2.7.exe"')
         & 'bash' $bashArgs
         Write-Log -message ('{0} :: pywin32 installed to /c/mozilla-build/python/Lib/site-packages/pywin32-218-py2.7-win32.egg' -f $($MyInvocation.MyCommand.Name), $version, $target, $url) -severity 'DEBUG'
       }
-      # buildbot seems to expect this virtualenv and these noddy paths to exist
-      Copy-Item ('{0}\mozilla-build\python\Lib\site-packages\virtualenv.py' -f $env:SystemDrive) ('{0}\mozilla-build' -f $env:SystemDrive) -Force
-      Copy-Item ('{0}\mozilla-build\python\Lib\site-packages\virtualenv.py' -f $env:SystemDrive) ('{0}\mozilla-build\python' -f $env:SystemDrive) -Force
-      #Create-SymbolicLink -link ('{0}\mozilla-build\virtualenv.py' -f $env:SystemDrive) -target ('{0}\mozilla-build\python\Lib\site-packages\virtualenv.py' -f $env:SystemDrive)
-      #Create-SymbolicLink -link ('{0}\mozilla-build\python\virtualenv.py' -f $env:SystemDrive) -target ('{0}\mozilla-build\python\Lib\site-packages\virtualenv.py' -f $env:SystemDrive)
+      # buildbot expects this specific virtualenv and these noddy paths to exist. go ahead and try to clean this up. i dare ya.
       $veArgs = @(('{0}\mozilla-build\python\Lib\site-packages\virtualenv.py' -f $env:SystemDrive), '--no-site-packages', '--distribute', ('{0}\mozilla-build\buildbotve' -f $env:SystemDrive))
       & 'python' $veArgs
-      Copy-Item ('{0}\mozilla-build\python\Lib\site-packages\virtualenv.py' -f $env:SystemDrive) ('{0}\mozilla-build\buildbotve' -f $env:SystemDrive) -Force
-      $pipArgs = @('install', 'setuptools==18.4', 'wheel==0.26.0')
-      & ('{0}\mozilla-build\buildbotve\Scripts\pip' -f $env:SystemDrive) $pipArgs
+      (New-Object Net.WebClient).DownloadFile('http://releng-puppet2.srv.releng.scl3.mozilla.com/repos/Windows/python/virtualenv.py', ('{0}\mozilla-build\buildbotve\virtualenv.py' -f $env:SystemDrive))
+      (New-Object Net.WebClient).DownloadFile('http://releng-puppet2.srv.releng.scl3.mozilla.com/repos/Windows/python/pip-1.5.5.tar.gz', ('{0}\mozilla-build\buildbotve\pip-1.5.5.tar.gz' -f $env:SystemDrive))
+      (New-Object Net.WebClient).DownloadFile('http://releng-puppet2.srv.releng.scl3.mozilla.com/repos/Windows/python/distribute-0.6.24.tar.gz', ('{0}\mozilla-build\buildbotve\distribute-0.6.24.tar.gz' -f $env:SystemDrive))
     } catch {
       Write-Log -message ("{0} :: failed to install buildbot. {1}" -f $($MyInvocation.MyCommand.Name), $_.Exception) -severity 'ERROR'
     }
@@ -1263,7 +1252,7 @@ function Run-BuildBot {
       Add-PathToPath -path ('{0}\mozilla-build\msys\bin' -f $env:SystemDrive) -target 'User'
       Add-PathToPath -path ('{0}\mozilla-build\python' -f $env:SystemDrive) -target 'User'
       Add-PathToPath -path ('{0}\mozilla-build\python\Scripts' -f $env:SystemDrive) -target 'User'
-
+      Tidy-Path
       Write-Log -message ("{0} :: starting buildbot" -f $($MyInvocation.MyCommand.Name)) -severity 'INFO'
       $bashArgs = @('--login', '-c', '"python /c/mozilla-build/buildbot.py --twistd-cmd /c/mozilla-build/python/Scripts/twistd.py"')
       & 'bash' $bashArgs
@@ -1291,6 +1280,13 @@ function Add-PathToPath {
   }
   $env:Path = [string]::Join(';', $paths)
   [Environment]::SetEnvironmentVariable("PATH", $env:Path, $target)
+}
+
+function Tidy-Path {
+  Write-Log -message ("{0} :: detected PATH: {1}" -f $($MyInvocation.MyCommand.Name), $env:Path) -severity 'DEBUG'
+  $env:Path = [string]::Join(';', ($env:Path.Split(';', [System.StringSplitOptions]::RemoveEmptyEntries) | %{ $_.TrimEnd('\').Replace('%SystemRoot%', $env:SystemRoot) } | Get-Unique))
+  [Environment]::SetEnvironmentVariable("PATH", $env:Path, 'Process')
+  Write-Log -message ("{0} :: tidied PATH: {1}" -f $($MyInvocation.MyCommand.Name), $env:Path) -severity 'DEBUG'
 }
 
 function New-SWRandomPassword {
