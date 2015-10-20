@@ -850,11 +850,10 @@ function Enable-BundleClone {
   }
   process {
     Set-IniValue -file $hgrc -section 'extensions' -key 'bundleclone' -value $path
-    if ($domain.EndsWith("use1.mozilla.com")) {
-      Set-IniValue -file $hgrc -section 'bundleclone' -key 'prefers' -value "ec2region=us-east-1, stream=revlogv1"
-    }
-    elseif ($domain.EndsWith("usw2.mozilla.com")) {
+    if ($domain.Contains(".usw2.")) {
       Set-IniValue -file $hgrc -section 'bundleclone' -key 'prefers' -value "ec2region=us-west-2, stream=revlogv1"
+    } else {
+      Set-IniValue -file $hgrc -section 'bundleclone' -key 'prefers' -value "ec2region=us-east-1, stream=revlogv1"
     }
   }
   end {
@@ -1211,7 +1210,8 @@ function Configure-NxLog {
 function Run-BuildBot {
   param (
     [string] $username = 'cltbld',
-    [string] $password = $username
+    [string] $password = $username,
+    [string] $domain = $env:USERDOMAIN
   )
   $lusers = (([ADSI]"WinNT://.").Children | Where { ($_.SchemaClassName -eq 'user') } | % { $_.name[0].ToString() } )
   if($lusers -NotContains $username) {
@@ -1231,7 +1231,7 @@ function Run-BuildBot {
       $hgrc = ('{0}\.hgrc' -f $env:UserProfile)
       Create-Hgrc -hgrc $hgrc
       if (Test-Path $hgrc) {
-        Enable-BundleClone -hgrc $hgrc
+        Enable-BundleClone -hgrc $hgrc -domain $domain
       }
       
       $env:MOZBUILDDIR = ('{0}\mozilla-build' -f $env:SystemDrive)

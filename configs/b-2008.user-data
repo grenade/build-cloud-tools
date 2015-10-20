@@ -114,7 +114,7 @@ Rename-Admin
 $hostnameCorrect = (Is-HostnameSetCorrectly -hostnameExpected $hostname)
 $domainCorrect = (Is-DomainSetCorrectly -domainExpected $domain)
 if ($hostnameCorrect -and $domainCorrect) {{
-  Run-BuildBot -username $buildUsername -password (New-SWRandomPassword -PasswordLength 16)
+  Run-BuildBot -username $buildUsername -password (New-SWRandomPassword -PasswordLength 16) -domain $domain
 }} else {{
   Set-Hostname -hostname $hostname
   Set-Domain -domain $domain
