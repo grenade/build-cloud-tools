@@ -90,25 +90,58 @@ function Send-Log {
   }
 }
 
-function Enable-UserdataPersist {
+function Set-Ec2ConfigPluginsState {
   <#
   .Synopsis
-    Sets Ec2ConfigService Ec2HandleUserData to enabled in config.
+    Sets Ec2Config plugins to desired enabled/disabled states
   .Description
     Modifies Ec2ConfigService config file and logs settings at time of check.
   .Parameter ec2SettingsFile
     The full path to the config file for Ec2ConfigService.
   #>
-  $startup = ('{0}\System32\GroupPolicy\Machine\Scripts\Startup' -f $env:SystemRoot)
-  $userscript = ('{0}\Amazon\EC2ConfigService\Scripts\UserScript.ps1' -f $env:ProgramFiles)
-  if (!(Test-Path $startup)) {
-    New-Item -ItemType Directory -Force -Path $startup
+  param (
+    [string] $ec2SettingsFile = "C:\Program Files\Amazon\Ec2ConfigService\Settings\Config.xml",
+    [string[]] $enabled = @('Ec2HandleUserData', 'Ec2InitializeDrives', 'Ec2EventLog', 'Ec2OutputRDPCert', 'Ec2SetDriveLetter', 'Ec2WindowsActivate'),
+    [string[]] $disabled = @('Ec2SetPassword', 'Ec2SetComputerName', 'Ec2ConfigureRDP', 'Ec2DynamicBootVolumeSize', 'AWS.EC2.Windows.CloudWatch.PlugIn')
+  )
+  $modified = $false;
+  [xml]$xml = (Get-Content $ec2SettingsFile)
+  foreach ($plugin in $xml.DocumentElement.Plugins.Plugin) {
+    Write-Log -message ('plugin state of {0} read as: {1}, in: {2}' -f $plugin.Name, $plugin.State, $ec2SettingsFile) -severity 'DEBUG'
+    if ($enabled -contains $plugin.Name) {
+      if ($plugin.State -ne "Enabled") {
+        Write-Log -message ('changing state of {0} plugin from: {1} to: Enabled, in: {2}' -f $plugin.Name, $plugin.State, $ec2SettingsFile) -severity 'INFO'
+        $plugin.State = "Enabled"
+        $modified = $true;
+      }
+    }
   }
-  if ((Test-Path $userscript) -and !(Test-Path ('{0}\UserScript.ps1' -f $startup))) {
-    Set-ExecutionPolicy RemoteSigned -force
-    Copy-Item $userscript $startup
-    Disable-Service -serviceName 'EC2Config'
+  if ($modified) {
+    Write-Log -message ('granting full access to: System, on: {0}' -f $ec2SettingsFile) -severity 'DEBUG'
+    $icaclsArgs = @($ec2SettingsFile, '/grant', 'System:F')
+    Write-Log -message ('granting full access to: Administrators, on: {0}' -f $ec2SettingsFile) -severity 'DEBUG'
+    $icaclsArgs = @($ec2SettingsFile, '/grant', 'Administrators:F')
+    & 'icacls' $icaclsArgs
+    $xml.Save($ec2SettingsFile)
   }
+  Write-Log -message ('granting read access to: Everyone, on: {0}' -f $ec2SettingsFile) -severity 'DEBUG'
+  $icaclsArgs = @($ec2SettingsFile, '/grant', 'Everyone:R')
+  & 'icacls' $icaclsArgs
+  Write-Log -message ('removing all inherited permissions on: {0}' -f $ec2SettingsFile) -severity 'DEBUG'
+  $icaclsArgs = @($ec2SettingsFile, '/inheritance:r')
+  & 'icacls' $icaclsArgs
+  Write-Log -message ('removing access for: root, on: {0}' -f $ec2SettingsFile) -severity 'DEBUG'
+  $icaclsArgs = @($ec2SettingsFile, '/remove:g', 'root')
+  & 'icacls' $icaclsArgs
+  Write-Log -message ('removing access for: Administrators, on: {0}' -f $ec2SettingsFile) -severity 'DEBUG'
+  $icaclsArgs = @($ec2SettingsFile, '/remove:g', 'Administrators')
+  & 'icacls' $icaclsArgs
+  Write-Log -message ('removing access for: Users, on: {0}' -f $ec2SettingsFile) -severity 'DEBUG'
+  $icaclsArgs = @($ec2SettingsFile, '/remove:g', 'Users')
+  & 'icacls' $icaclsArgs
+  Write-Log -message ('removing access for: System, on: {0}' -f $ec2SettingsFile) -severity 'DEBUG'
+  $icaclsArgs = @($ec2SettingsFile, '/remove:g', 'System')
+  & 'icacls' $icaclsArgs
 }
 
 function Stop-ComputerWithDelay {
@@ -1178,6 +1211,7 @@ function Install-BasePrerequisites {
   #Install-MozillaBuildAndPrerequisites
   #Install-BuildBot
   #Install-ToolTool
+  Set-AutoLogin
 }
 
 function Set-Timezone {
@@ -1296,6 +1330,35 @@ function Tidy-Path {
   $env:Path = [string]::Join(';', ($env:Path.Split(';', [System.StringSplitOptions]::RemoveEmptyEntries) | %{ $_.TrimEnd('\').Replace('%SystemRoot%', $env:SystemRoot) } | Get-Unique))
   [Environment]::SetEnvironmentVariable("PATH", $env:Path, 'Process')
   Write-Log -message ("{0} :: tidied PATH: {1}" -f $($MyInvocation.MyCommand.Name), $env:Path) -severity 'DEBUG'
+}
+
+function Set-AutoLogin {
+  param (
+    [string] $username = 'cltbld',
+    [string] $domain = '.'
+  )
+  $winlogon = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\WinLogon'
+  try {
+    Set-RegistryValue -path $winlogon -key 'AutoAdminLogon' -value 1
+    Set-RegistryValue -path $winlogon -key 'DefaultDomainName' -value $domain
+    Set-RegistryValue -path $winlogon -key 'DefaultUserName' -value $username
+    Set-RegistryValue -path $winlogon -key 'AutoLogonCount' -value 100000
+    Write-Log -message ('{0} :: auto-login settings validated for user: {1}\{2}' -f $($MyInvocation.MyCommand.Name), $domain, $username) -severity 'DEBUG'
+  } catch {
+    Write-Log -message ("{0} :: failed to set auto-login settings. {1}" -f $($MyInvocation.MyCommand.Name), $_.Exception) -severity 'ERROR'
+  }
+}
+
+function Set-RegistryValue {
+  param (
+    [string] $path,
+    [string] $key,
+    [object] $value
+  )
+  if ((!(Test-Path ('{0}\{1}' -f $path, $key))) -or ((Get-ItemProperty $winlogon -Name $key).$key -ne $value)) {
+    Set-ItemProperty $path -Name $key -Value $value
+    Write-Log -message ('{0} :: set value of: {1}\{2} to: {3}' -f $($MyInvocation.MyCommand.Name), $path, $key, $value) -severity 'DEBUG'
+  }
 }
 
 function New-SWRandomPassword {

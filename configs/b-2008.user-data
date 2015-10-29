@@ -89,7 +89,7 @@ function Download-Module {{
   $moduleName = [IO.Path]::GetFileNameWithoutExtension($filename)
   $modulePath = ('{{0}}\{{1}}' -f $modulesPath, $moduleName)
   if (Test-Path $modulePath) {{
-    Remove-Module $moduleName
+    Remove-Module $moduleName -ErrorAction SilentlyContinue
     Remove-Item -path $modulePath -recurse -force
   }}
   New-Item -ItemType Directory -Force -Path $modulePath
@@ -104,25 +104,26 @@ Import-Module Ec2UserdataUtilsMagicSauce
 
 # create the log directory if it doesn't exist
 New-Item -ItemType Directory -Force -Path $logDir
+Set-Ec2ConfigPluginsState
 Set-Timezone
 Disable-Firewall 
 Disable-WindowsUpdate
 
 Install-BasePrerequisites -aggregator $aggregator
-#Rename-Admin
+Rename-Admin
 
 $hostnameCorrect = (Is-HostnameSetCorrectly -hostnameExpected $hostname)
 $domainCorrect = (Is-DomainSetCorrectly -domainExpected $domain)
 if ($hostnameCorrect -and $domainCorrect) {{
-  Run-BuildBot -username $buildUsername -password (New-SWRandomPassword -PasswordLength 16) -domain $domain
+  #Run-BuildBot -username $buildUsername -password (New-SWRandomPassword -PasswordLength 16) -domain $domain
 }} else {{
   Set-Hostname -hostname $hostname
   Set-Domain -domain $domain
   Stop-ComputerWithDelay -reason 'userdata run complete' -restart
 }}
 Send-Log -logfile $runLog -subject ('UserData Run Report for {{0}}.{{1}}' -f $hostname, $domain) -to 'releng-puppet-mail@mozilla.com' -from $logSender
-Move-Item -path $runLog -destination ([IO.Path]::Combine($logDir, ('userdata-run-{{0}}.log' -f [DateTime]::Now.ToString("yyyyMMdd-HHmm"))))
+Move-Item -path $runLog -destination ([IO.Path]::Combine($logDir, ('userdata-run-{{0}}.log' -f [DateTime]::Now.ToString("yyyyMMdd-HHmm"))))-ErrorAction SilentlyContinue
 Send-Log -logfile $ec2Log -subject ('EC2 Config Report for {{0}}.{{1}}' -f $hostname, $domain) -to 'releng-puppet-mail@mozilla.com' -from $logSender
-Move-Item -path $ec2Log -destination ([IO.Path]::Combine($logDir, ('ec2config-run-{{0}}.log' -f [DateTime]::Now.ToString("yyyyMMdd-HHmm"))))
+Move-Item -path $ec2Log -destination ([IO.Path]::Combine($logDir, ('ec2config-run-{{0}}.log' -f [DateTime]::Now.ToString("yyyyMMdd-HHmm"))))-ErrorAction SilentlyContinue
 </powershell>
 <persist>true</persist>
