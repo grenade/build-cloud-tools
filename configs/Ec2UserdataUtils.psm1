@@ -1557,7 +1557,7 @@ function Install-RelOpsPrerequisites {
   )
   #Install-Package -id 'nxlog' -version '2.8.1248' -testPath ('{0}\nxlog\conf\nxlog.conf' -f @{$true=${env:ProgramFiles(x86)};$false=$env:ProgramFiles}[(Test-Path Env:\'ProgramFiles(x86)')])
   Configure-NxLog -aggregator $aggregator
-  if (Install-Package -id 'sublimetext3' -version '3.0.0.3083' -testPath ('{0}\Sublime Text 3\sublime_text.exe' -f $env:ProgramFiles)) {
+  if (Install-Package -id 'sublimetext3' -version '3.0.0.3103' -testPath ('{0}\Sublime Text 3\sublime_text.exe' -f $env:ProgramFiles)) {
     foreach ($ftype in @('txtfile', 'inifile')) {
       & 'ftype' @(('{0}="{1}\\Sublime Text 3\sublime_text.exe" %1' -f $ftype, $env:ProgramFiles))
     }
