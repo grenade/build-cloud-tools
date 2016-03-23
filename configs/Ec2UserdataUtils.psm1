@@ -788,7 +788,6 @@ function Get-SourceCaches {
     [hashtable] $buildRepos = @{
       'https://hg.mozilla.org/integration/mozilla-inbound' = ('{0}\hg-shared\integration\mozilla-inbound' -f $cachePath);
       'https://hg.mozilla.org/integration/fx-team' = ('{0}\hg-shared\integration\fx-team' -f $cachePath);
-      'https://hg.mozilla.org/projects/ux' = ('{0}\hg-shared\projects\ux' -f $cachePath);
       'https://hg.mozilla.org/mozilla-central' = ('{0}\hg-shared\mozilla-central' -f $cachePath)
     },
     [hashtable] $tryRepos = @{
@@ -1566,6 +1565,16 @@ function Install-RelOpsPrerequisites {
   Install-Package -id 'sublimetext3.packagecontrol' -version '2.0.0.20140915' -testPath ('{0}\Sublime Text 3\Installed Packages\Package Control.sublime-package' -f $env:AppData)
   if ($env:ComputerName.Contains('-w732-')) {
     Install-Package -id 'puppet' -version '3.4.3' -testPath ('{0}\Puppet Labs\Puppet\bin\puppet.bat' -f $env:ProgramFiles)
+  }
+  
+  #https://bugzilla.mozilla.org/show_bug.cgi?id=1261812
+  if (-not (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\' -Name 'LocalDumps' -ErrorAction SilentlyContinue)) {
+    New-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\' -Name 'LocalDumps'
+  }
+  if (-not (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\' -Name 'DontShowUI' -ErrorAction SilentlyContinue)) {
+    New-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\' -Type 'DWord' -Name 'DontShowUI' -Value '0x00000001'
+  } else {
+    Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\' -Type 'DWord' -Name 'DontShowUI' -Value '0x00000001'
   }
   #Install-Package -id 'git' -version '2.5.3' -testPath ('{0}\Git\usr\bin\bash.exe' -f $env:ProgramFiles)
   #$msys = ('{0}\Git\usr\bin' -f $env:ProgramFiles)
